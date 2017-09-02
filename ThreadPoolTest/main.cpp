@@ -19,15 +19,14 @@ public:
 		{
 			while (true)
 			{
-				std::function<void()> task;
+				function<void()> task;
 
 				{
-					std::unique_lock<std::mutex> lock(this->queue_mutex);
-					this->condition.wait(lock,
-						[this]{ return this->stop || !this->tasks.empty(); });
+					unique_lock<mutex> lock(this->queue_mutex);
+					this->condition.wait(lock,[this]{ return this->stop || !this->tasks.empty(); });
 					if (this->stop && this->tasks.empty())
 						return;
-					task = std::move(this->tasks.front());
+					task = tasks.front();
 					this->tasks.pop();
 				}
 
@@ -37,22 +36,18 @@ public:
 		);
 	}
 	template<class F, class... Args>
-	auto enqueue(F&& f, Args&&... args)
+	auto enqueue(F f, Args... args)
 		->future<typename result_of<F(Args...)>::type>
 	{
-		using return_type = typename std::result_of<F(Args...)>::type;
-
-		auto task = std::make_shared< std::packaged_task<return_type()> >(
-			std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-			);
-
-		std::future<return_type> res = task->get_future();
+		typedef typename result_of<F(Args...)>::type  return_type;
+		auto task = make_shared<packaged_task<return_type()> >(bind(f, args...));
+		future<return_type> res = task->get_future();
 		{
-			std::unique_lock<std::mutex> lock(queue_mutex);
+			unique_lock<mutex> lock(queue_mutex);
 
 			// 关闭线程池就不允许添加任务
 			if (stop)
-				throw std::runtime_error("enqueue on stopped ThreadPool");
+				throw runtime_error("enqueue on stopped ThreadPool");
 
 			tasks.emplace([task](){ (*task)(); });
 		}
@@ -62,11 +57,11 @@ public:
 	~ThreadPool()
 	{
 		{
-			std::unique_lock<std::mutex> lock(queue_mutex);
+			unique_lock<std::mutex> lock(queue_mutex);
 			stop = true;
 		}
 		condition.notify_all();
-		for (std::thread &worker : workers)
+		for (thread &worker : workers)
 			worker.join();
 	}
 private:
@@ -88,9 +83,18 @@ int dosomething(int i)
 	cout << "world " << i << endl;
 	return i*i;
 }
-
+class A
+{
+public:
+	A(int b)
+	{
+		cout << "construction" << endl;
+	}
+	A(const A &a){ cout << "copy construction" << endl; }
+};
 int main()
 {
+
 	ThreadPool pool(4);
 	vector< std::future<int> > results;
 	for (int i = 0; i < 8; i++)
@@ -100,7 +104,5 @@ int main()
 	for (auto && result : results)
 		cout << result.get() << ' ';
 	cout << std::endl;
-
-
 	return 0;
 }
