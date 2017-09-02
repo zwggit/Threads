@@ -39,7 +39,7 @@ public:
 	auto enqueue(F f, Args... args)
 		->future<typename result_of<F(Args...)>::type>
 	{
-		typedef typename result_of<F(Args...)>::type  return_type;
+		typedef  result_of<F(Args...)>::type  return_type;
 		auto task = make_shared<packaged_task<return_type()> >(bind(f, args...));
 		future<return_type> res = task->get_future();
 		{
